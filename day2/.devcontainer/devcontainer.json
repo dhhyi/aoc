@@ -1,0 +1,10 @@
+{
+  "name": "AOC 2022 Day 2",
+  "image": "ghcr.io/dhhyi/dcc-devcontainer-javascript",
+  "settings": {
+    "files.exclude": {
+      ".devcontainer": true,
+      ".update_devcontainer.sh": true
+    }
+  }
+}
