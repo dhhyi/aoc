@@ -5,19 +5,18 @@ set -e
 day="$(date +%-d)"
 day="${2:-$day}"
 
+lang="${1:-javascript}"
+
 # mkdir -p "day$day"
-dcc "dcc://${1:-javascript}" "day$day" --name "AOC 2022 Day $day" --no-vscode
+dcc "dcc://$lang" "day$day" --name "AOC 2022 Day $day" --no-vscode
 
-cat <<EOF > "day$day/day$day.js"
-const stdin = process.openStdin();
-let data = "";
-stdin.on("data", function (chunk) {
-    data += chunk;
-});
+if [ "$lang" = "javascript" ]; then
+cat <<EOF > "day$day/day$day.mjs"
+import readDataFromStdin from "../read-data.mjs";
+const data = await readDataFromStdin()
 
-stdin.on("end", function () {
-    console.log(data);
-});
+console.log(data);
 EOF
+fi
 
 code-insiders "day$day"
