@@ -1,6 +1,6 @@
 {
   "name": "AOC 2022 Day 11",
-  "image": "ghcr.io/dhhyi/dcc-devcontainer-javascript",
+  "image": "ghcr.io/dhhyi/dcc-devcontainer-elixir",
   "settings": {
     "files.exclude": {
       ".devcontainer": true,
