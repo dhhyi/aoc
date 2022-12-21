@@ -38,6 +38,7 @@ function readMonkeys(data) {
                 const t = num % Number(match.groups.test) === 0;
                 return t ? match.groups.true : match.groups.false;
             },
+            div: Number(match.groups.test)
         }
 
         monkeys[match.groups.monkey] = monkey;
@@ -84,11 +85,15 @@ function part1() {
 
 part1()
 
+
 function part2() {
     const monkeys = readMonkeys(data);
 
+    const diver = Object.values(monkeys).map(m => m.div).reduce((a, b) => a * b);
+    const p2unworry = item => item % diver
+
     for (let i = 0; i < 10000; i++) {
-        executeRound(monkeys, item => item)
+        executeRound(monkeys, p2unworry)
     }
     dump(monkeys)
 
