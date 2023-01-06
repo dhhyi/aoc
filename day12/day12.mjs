@@ -31,39 +31,21 @@ function contains(visited, [x, y]) {
 
 function append(visited, [x, y]) {
     visited[`${x}-${y}`] = true;
-    visited.last = [x, y];
     return visited;
-}
-
-function unappend(visited, [x, y], [x2, y2]) {
-    delete visited[`${x}-${y}`];
-    visited.last = [x2, y2];
-    return visited;
-}
-
-function size(visited) {
-    return Object.keys(visited).length - 2;
 }
 
 function distance([x1, y1], [x2, y2]) {
     return Math.abs(x1 - x2) + Math.abs(y1 - y2);
 }
 
-function nextDirections(terrain, [x, y], visited = {}, end) {
+function nextDirections(terrain, [x, y], visited = {}) {
     const l = level(terrain, [x, y]);
-    const directions = [[x, y - 1], [x + 1, y], [x - 1, y], [x, y + 1]].filter(([x, y]) => !contains(visited, [x, y]) && x >= 0 && y >= 0 && y < terrain.length && x < terrain[y].length);
-
-    const higher = []
-    const same = []
-    directions.forEach(([x, y]) => {
-        const cl = level(terrain, [x, y]);
-        if (cl === l + 1) {
-            higher.push([x, y])
-        } else if (cl === l) {
-            same.push([x, y])
-        }
-    });
-    return higher.concat(end ? same.sort((a, b) => distance(a, end) - distance(b, end)) : same);
+    const directions = [[x, y - 1], [x - 1, y], [x + 1, y], [x, y + 1]]
+        .filter(([x, y]) => !contains(visited, [x, y]) &&
+            x >= 0 && y >= 0 && y < terrain.length && x < terrain[y].length &&
+            l - level(terrain, [x, y]) <= 1
+        );
+    return directions;
 }
 
 function dump(terrain, visited = {}) {
@@ -91,64 +73,35 @@ function dump(terrain, visited = {}) {
 
 const terrain = data.split("\n").map(line => line.split(""));
 
-dump(terrain);
+// dump(terrain);
 
-// console.log(findSymbol(terrain, "E"));
-// console.log(findSymbol(terrain, "S"));
+// console.log('S', nextDirections(terrain, findSymbol(terrain, "S")));
+// console.log('E', nextDirections(terrain, findSymbol(terrain, "E")));
 
-// console.log(level(terrain, findSymbol(terrain, "S")));
-// console.log(level(terrain, [1, 1]));
-// console.log(level(terrain, findSymbol(terrain, "E")));
-
-console.log('S', nextDirections(terrain, findSymbol(terrain, "S")));
-console.log('1-2', nextDirections(terrain, [1, 2], [], findSymbol(terrain, "E")));
-console.log('2-1', nextDirections(terrain, [2, 1]));
-console.log('2-2', nextDirections(terrain, [2, 2]));
-console.log('2-4', nextDirections(terrain, [2, 4]));
-console.log('E', nextDirections(terrain, findSymbol(terrain, "E"), [[4, 2]]));
-console.log('0-1', nextDirections(terrain, [0, 1]));
-
-let path;
-let bound = terrain.length * terrain[0].length;
-// let bound = 2 * Math.max(terrain.length, terrain[0].length);
-// let bound = 3 * (terrain.length + terrain[0].length);
-
-let steps = 0;
-
-function boundLimitReached(visited, end) {
-    const curSize = size(visited);
-    // console.log({ curSize, bound, end, visited });
-    return curSize >= bound ||
-        (end && curSize + distance(visited.last, end) >= bound) ||
-        curSize + (26 - level(terrain, visited.last)) >= bound ||
-        false;
+function traverse(terrain, start, isEnd) {
+    const queue = [];
+    const visited = {};
+    queue.push([start, 0]);
+    append(visited, start);
+    while (queue.length > 0) {
+        const [current, level] = queue.shift();
+        if (isEnd(current)) {
+            return level;
+        } else {
+            for (const next of nextDirections(terrain, current, visited)) {
+                append(visited, next);
+                queue.push([next, level + 1]);
+            };
+        }
+    }
+    dump(terrain, visited);
+    throw new Error("No path found");
 }
 
-function traverse(terrain, end, visited) {
-    // console.log({ visited });
-    steps++;
-    if (steps % 1000000 === 0) {
-        console.log(size(visited), bound);
-        steps = 0;
-        dump(terrain, visited);
-    }
-    if (boundLimitReached(visited)) {
-        return;
-    }
-    const current = visited.last;
-    if (current[0] === end[0] && current[1] === end[1]) {
-        console.log(`found path with length ${size(visited)}`);
-        bound = size(visited);
-        path = Object.assign({}, visited);
-        return;
-    }
-    nextDirections(terrain, current, visited, end).forEach(next => {
-        traverse(terrain, end, append(visited, next));
-        unappend(visited, next, current);
-    });
-}
+const end = findSymbol(terrain, 'S');
 
-traverse(terrain, findSymbol(terrain, "E"), append({}, findSymbol(terrain, 'S')));
-
-const part1 = size(path);
+const part1 = traverse(terrain, findSymbol(terrain, 'E'), current => distance(current, end) === 0);
 console.log(`Part 1: ${part1}`);
+
+const part2 = traverse(terrain, findSymbol(terrain, 'E'), current => level(terrain, current) === 1);
+console.log(`Part 2: ${part2}`);
