@@ -1,0 +1,10 @@
+{
+  "name": "AOC 2022 Day 14",
+  "image": "ghcr.io/dhhyi/dcc-devcontainer-elixir",
+  "settings": {
+    "files.exclude": {
+      ".devcontainer": true,
+      ".update_devcontainer.sh": true
+    }
+  }
+}
