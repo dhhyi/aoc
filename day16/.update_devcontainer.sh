@@ -1,0 +1,5 @@
+#!/bin/sh -e
+
+cd "$(dirname "$(readlink -f "$0")")"
+
+curl -so- https://raw.githubusercontent.com/dhhyi/devcontainer-creator/dist/bundle.js | node - dcc://elixir . --name "AOC 2022 Day 16" --no-vscode "$@"
