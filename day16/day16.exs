@@ -1,4 +1,4 @@
-valves =
+{valves, graph} =
   IO.read(:stdio, :all)
   |> String.trim()
   |> String.split("\n")
@@ -15,198 +15,159 @@ valves =
       raise "Could not parse line: '#{line}'"
     end
   end)
+  |> Enum.reduce({[], []}, fn {name, {flow_rate, to}}, {valves, tunnels} ->
+    new_valves = if flow_rate > 0, do: [{name, flow_rate} | valves], else: valves
+    tunnels = [{name, to} | tunnels]
+    {new_valves, tunnels}
+  end)
+  |> (fn {valves, tunnels} -> {Enum.into(valves, %{}), Enum.into(tunnels, %{})} end).()
+
+defmodule BFS do
+  def bfs(graph, start, goals) do
+    bfs(graph, MapSet.new([start]), goals, MapSet.new(), 0, %{})
+  end
+
+  defp bfs(graph, border, goals, visited, step, results) do
+    visited = MapSet.union(border, visited)
+    border = MapSet.new(Enum.flat_map(border, &graph[&1])) |> MapSet.difference(visited)
+    step = step + 1
+
+    results =
+      Enum.reduce(MapSet.intersection(border, goals), results, fn goal, results ->
+        Map.put(results, goal, step)
+      end)
+
+    new_goals = MapSet.difference(goals, border)
+
+    if MapSet.size(goals) == 0 or MapSet.size(border) == 0 do
+      results
+    else
+      bfs(graph, border, new_goals, visited, step, results)
+    end
+  end
+end
+
+distances =
+  (["AA"] ++ Map.keys(valves))
+  |> Enum.map(fn start ->
+    result = BFS.bfs(graph, start, MapSet.new(Map.keys(valves)))
+    {start, result}
+  end)
   |> Enum.into(%{})
 
-execute_example = fn approach ->
-  example_path = [
-    {:goto, "DD"},
-    {:open, "DD"},
-    {:goto, "CC"},
-    {:goto, "BB"},
-    {:open, "BB"},
-    {:goto, "AA"},
-    {:goto, "II"},
-    {:goto, "JJ"},
-    {:open, "JJ"},
-    {:goto, "II"},
-    {:goto, "AA"},
-    {:goto, "DD"},
-    {:goto, "EE"},
-    {:goto, "FF"},
-    {:goto, "GG"},
-    {:goto, "HH"},
-    {:open, "HH"},
-    {:goto, "GG"},
-    {:goto, "FF"},
-    {:goto, "EE"},
-    {:open, "EE"},
-    {:goto, "DD"},
-    {:goto, "CC"},
-    {:open, "CC"},
-    {:noop},
-    {:noop},
-    {:noop},
-    {:noop},
-    {:noop}
-  ]
+defmodule Data do
+  defstruct [:valves, :distances, :graph, :limit]
 
-  example_path
-  |> Enum.reduce(approach, fn action, approach ->
-    # IO.inspect(Approach.status(approach))
-    # IO.inspect(Extrapolate.calculate_possible_max(approach))
-    Approach.next(approach, action)
-  end)
-  |> IO.inspect()
+  def new(valves, distances, graph, limit) do
+    %Data{valves: valves, distances: distances, graph: graph, limit: limit}
+  end
 end
 
-defmodule Approach do
-  defstruct [
-    :valves,
-    :open_valves,
-    :closed_valves,
-    :flow_rate,
-    :released,
-    :minute,
-    :room,
-    :limit,
-    :next
-  ]
+defmodule Calculate do
+  def flow(data, way) do
+    [start | remaining] = way
 
-  def new(valves) do
-    %Approach{
-      valves: valves,
-      flow_rate: 0,
-      released: 0,
-      minute: 0,
-      room: "AA",
-      limit: 30,
-      next: [],
-      open_valves: MapSet.new(),
-      closed_valves:
-        Map.keys(valves)
-        |> Enum.filter(fn valve -> elem(valves[valve], 0) > 0 end)
-        |> Enum.sort_by(fn valve -> elem(valves[valve], 0) end, :desc)
-    }
-    |> advance()
+    [rate, time, _, released] =
+      Enum.reduce(remaining, [0, 0, start, 0], fn valve, [rate, time, position, released] ->
+        valve_rate = data.valves[valve]
+        distance = data.distances[position][valve]
+        new_rate = rate + valve_rate
+        new_time = time + distance + 1
+        released = released + rate * (new_time - time)
+        [new_rate, new_time, valve, released]
+      end)
+
+    released + rate * (data.limit - time)
   end
 
-  def status(approach) do
-    {approach.minute, approach.room, approach.flow_rate, approach.released, approach.open_valves,
-     length(approach.closed_valves) == 0}
+  def next(data, remaining, time, from) do
+    order =
+      MapSet.to_list(remaining)
+      |> Enum.map(fn to ->
+        {to, time + data.distances[from][to] + 1}
+      end)
+      |> Enum.filter(fn {_to, time} -> time <= data.limit end)
+
+    if order == [], do: [nil], else: order
+  end
+end
+
+defmodule Traversal do
+  def traverse(data, from) when is_bitstring(from) do
+    traverse(data, from, 0, MapSet.new(Map.keys(data.valves)), [])
   end
 
-  defp advance(approach) do
-    if approach.minute >= approach.limit do
-      raise "Limit reached"
+  def traverse(data, from) when is_tuple(from) do
+    traverse(data, from, {0, 0}, MapSet.new(Map.keys(data.valves)), {[], []})
+  end
+
+  def traverse(data, {from1, from2}, {time1, time2}, remaining, {visited1, visited2}) do
+    visited1 = visited1 ++ [from1]
+    visited2 = visited2 ++ [from2]
+
+    remaining = MapSet.difference(remaining, MapSet.new(visited1 ++ visited2))
+
+    order =
+      for(
+        o1 <- Calculate.next(data, remaining, time1, from1),
+        o2 <- Calculate.next(data, remaining, time2, from2),
+        {o1, o2} != {nil, nil},
+        o1 == nil or o2 == nil or elem(o1, 0) != elem(o2, 0),
+        do: {o1, o2}
+      )
+
+    if length(order) == 0 do
+      Calculate.flow(data, visited1) + Calculate.flow(data, visited2)
     else
-      next =
-        cond do
-          approach.minute + 1 >= approach.limit ->
-            []
+      Enum.map(order, fn args ->
+        case args do
+          {{to1, time1}, nil} ->
+            Calculate.flow(data, visited2) +
+              traverse(data, to1, time1, remaining, visited1)
 
-          length(approach.closed_valves) == 0 ->
-            [{:noop}]
+          {nil, {to2, time2}} ->
+            Calculate.flow(data, visited1) +
+              traverse(data, to2, time2, remaining, visited2)
 
-          true ->
-            if(Enum.member?(approach.closed_valves, approach.room),
-              do: [{:open, approach.room}],
-              else: []
-            ) ++
-              (elem(approach.valves[approach.room], 1)
-               |> Enum.map(fn room -> {:goto, room} end))
+          {{to1, time1}, {to2, time2}} ->
+            traverse(data, {to1, to2}, {time1, time2}, remaining, {visited1, visited2})
         end
-
-      %Approach{
-        approach
-        | minute: approach.minute + 1,
-          released: approach.released + approach.flow_rate,
-          next: next
-      }
+      end)
+      |> Enum.max()
     end
   end
 
-  def next(approach, {:noop}) do
-    advance(approach)
-  end
+  def traverse(data, from, time, remaining, visited) do
+    visited = visited ++ [from]
 
-  def next(approach, {:open, room}) do
-    current = elem(approach.valves[room], 0)
+    remaining = MapSet.difference(remaining, MapSet.new(visited))
 
-    %Approach{
-      approach
-      | flow_rate: approach.flow_rate + current,
-        open_valves: MapSet.put(approach.open_valves, room),
-        closed_valves: Enum.filter(approach.closed_valves, fn v -> v != room end)
-    }
-    |> advance()
-  end
+    order = Calculate.next(data, remaining, time, from)
 
-  def next(approach, {:goto, room}) do
-    %Approach{approach | room: room} |> advance()
-  end
-end
-
-defmodule Extrapolate do
-  defp ideal_steps(approach) do
-    all = Enum.flat_map(approach.closed_valves, fn room -> [{:goto, room}, {:open, room}] end)
-
-    if Enum.at(all, 0) == {:goto, approach.room} do
-      Enum.slice(all, 1, length(all) - 1)
-    else
-      all
-    end
-  end
-
-  def calculate_possible_max(approach) do
-    Enum.reduce(
-      (approach.minute + 1)..approach.limit,
-      {approach.released, approach.flow_rate, ideal_steps(approach)},
-      fn _, {released, rate, steps} ->
-        case steps do
-          [{:goto, _} | rest] ->
-            {released + rate, rate, rest}
-
-          [{:open, room} | rest] ->
-            current = elem(approach.valves[room], 0)
-            {released + rate + current, rate + current, rest}
-
-          [] ->
-            {released + rate, rate, steps}
-        end
-      end
-    )
-    |> elem(0)
-  end
-end
-
-defmodule Traverse do
-  defp traverse(approach, current_max) do
-    case approach.next do
-      [] ->
-        if approach.released > current_max, do: approach.released, else: current_max
+    case order do
+      [nil] ->
+        Calculate.flow(data, visited)
 
       _ ->
-        Enum.reduce(approach.next, current_max, fn action, current_max ->
-          possible_max = Extrapolate.calculate_possible_max(approach)
-
-          if possible_max < current_max do
-            current_max
-          else
-            new_max = traverse(Approach.next(approach, action), current_max)
-
-            if new_max > current_max, do: new_max, else: current_max
-          end
+        Enum.map(order, fn {to, time} ->
+          traverse(data, to, time, remaining, visited)
         end)
+        |> Enum.max()
     end
-  end
-
-  def traverse(approach) do
-    traverse(approach, 0)
   end
 end
 
-approach = Approach.new(valves)
+data1 = Data.new(valves, distances, graph, 30)
 
-# execute_example.(approach)
+# Calculate.flow(data1, ["AA", "DD", "BB", "JJ", "HH", "EE", "CC"])
+# |> IO.inspect(label: "Example 1")
 
-Traverse.traverse(approach) |> IO.inspect(label: "Part 1")
+Traversal.traverse(data1, "AA") |> IO.inspect(label: "Part 1")
+
+data2 = Data.new(valves, distances, graph, 26)
+
+# (Calculate.flow(data2, ["AA", "JJ", "BB", "CC"]) +
+#    Calculate.flow(data2, ["AA", "DD", "HH", "EE"]))
+# |> IO.inspect(label: "Example 2")
+
+Traversal.traverse(data2, {"AA", "AA"}) |> IO.inspect(label: "Part 2")
